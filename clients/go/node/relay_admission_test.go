@@ -1240,15 +1240,10 @@ func TestRelayAdmissionDispositionSimplicityPolicyFanOut(t *testing.T) {
 	}
 }
 
-// TestRelayAdmissionDispositionCoreExtNodeRuntimeReject covers the
-// mempool_precheck.go exit where rejectUnsupportedCoreExtNodeRuntime selects
-// RelayAdmissionStableTerminalReject for a CORE_EXT (covenant_type 0x0102)
-// candidate. CORE_EXT is a RETIRED, permanently consensus-rejected surface —
-// this proves it stays rejected through the live relay entry point, reusing
-// the same generic single-output fixture builder simplicityPolicyCandidate
-// above reuses, parameterized with COV_TYPE_CORE_EXT instead of
-// COV_TYPE_CORE_SIMPLICITY.
-func TestRelayAdmissionDispositionCoreExtNodeRuntimeReject(t *testing.T) {
+// TestRelayAdmissionDispositionUnassignedCovenantReject proves the canonical
+// consensus pipeline rejects a covenant_type 0x0102 output before that
+// pipeline's input-resolution, witness-slot, or signature-verification stages.
+func TestRelayAdmissionDispositionUnassignedCovenantReject(t *testing.T) {
 	h := newRelayHarness(t, nil, 1_000_000)
 	raw := txWithOneInputOneOutput(h.outpoints[0].Txid, h.outpoints[0].Vout, 1,
 		consensus.COV_TYPE_CORE_EXT, nil, nil)
@@ -1257,9 +1252,9 @@ func TestRelayAdmissionDispositionCoreExtNodeRuntimeReject(t *testing.T) {
 	if got.Disposition != RelayAdmissionStableTerminalReject {
 		t.Fatalf("disposition=%v, want STABLE_TERMINAL_REJECT (err=%v)", got.Disposition, got.Err)
 	}
-	wantMessage := "CORE_EXT output unsupported by Go node runtime"
+	wantMessage := "TX_ERR_COVENANT_TYPE_INVALID: unknown covenant_type"
 	if got.Err == nil || got.Err.Error() != wantMessage {
-		t.Fatalf("err=%v, want the unchanged %q", got.Err, wantMessage)
+		t.Fatalf("err=%v, want %q", got.Err, wantMessage)
 	}
 	if kind := admitKind(t, got.Err); kind != TxAdmitRejected {
 		t.Fatalf("TxAdmitErrorKind=%q, want %q", kind, TxAdmitRejected)
@@ -1268,12 +1263,62 @@ func TestRelayAdmissionDispositionCoreExtNodeRuntimeReject(t *testing.T) {
 		t.Fatal("a proven stable terminal rejection must publish its exact context")
 	}
 	if h.mp.Len() != 0 {
-		t.Fatalf("a CORE_EXT candidate became resident: len=%d", h.mp.Len())
+		t.Fatalf("an unassigned covenant candidate became resident: len=%d", h.mp.Len())
 	}
 	// The legacy wrapper observes the byte-identical rejection for the same bytes.
 	legacy := h.mp.AddRemoteTx(raw)
 	if legacy == nil || legacy.Error() != wantMessage || admitKind(t, legacy) != TxAdmitRejected {
 		t.Fatalf("legacy AddRemoteTx err=%v, want the identical %q", legacy, wantMessage)
+	}
+}
+
+func TestRelayAdmissionDispositionUnassignedCovenantSpendReject(t *testing.T) {
+	h := newRelayHarness(t, nil, 1_000_000)
+	entry := h.st.Utxos[h.outpoints[0]]
+	entry.CovenantType = consensus.COV_TYPE_CORE_EXT
+	h.st.Utxos[h.outpoints[0]] = entry
+	raw := txWithOneInputOneOutput(h.outpoints[0].Txid, h.outpoints[0].Vout, 1,
+		consensus.COV_TYPE_P2PK, h.toAddr, nil)
+
+	expected := h.context()
+	got := h.mp.AddRemoteTxForRelay(raw, expected)
+	if got.Disposition != RelayAdmissionStableTerminalReject {
+		t.Fatalf("disposition=%v, want STABLE_TERMINAL_REJECT (err=%v)", got.Disposition, got.Err)
+	}
+	wantMessage := "TX_ERR_COVENANT_TYPE_INVALID: unsupported covenant in basic apply"
+	if got.Err == nil || got.Err.Error() != wantMessage {
+		t.Fatalf("err=%v, want %q", got.Err, wantMessage)
+	}
+	if kind := admitKind(t, got.Err); kind != TxAdmitRejected {
+		t.Fatalf("TxAdmitErrorKind=%q, want %q", kind, TxAdmitRejected)
+	}
+	if !got.HasAdmissionContext || got.AdmissionContext != *expected {
+		t.Fatalf("published context=%+v hasContext=%v, want %+v", got.AdmissionContext, got.HasAdmissionContext, *expected)
+	}
+	if h.mp.Len() != 0 {
+		t.Fatalf("an unassigned covenant spend became resident: len=%d", h.mp.Len())
+	}
+}
+
+func TestRelayAdmissionUnassignedCovenantOutputOrder(t *testing.T) {
+	cases := []struct {
+		outputs []consensus.TxOutput
+		want    string
+	}{
+		{[]consensus.TxOutput{{Value: 1, CovenantType: 0x0102, CovenantData: []byte{0x01}}, {Value: 1, CovenantType: consensus.COV_TYPE_P2PK}}, "TX_ERR_COVENANT_TYPE_INVALID: unknown covenant_type"},
+		{[]consensus.TxOutput{{Value: 1, CovenantType: consensus.COV_TYPE_P2PK}, {Value: 1, CovenantType: 0x0102, CovenantData: []byte{0x01}}}, "TX_ERR_COVENANT_TYPE_INVALID: invalid CORE_P2PK covenant_data length"},
+	}
+	for _, tc := range cases {
+		h := newRelayHarness(t, nil, 1_000_000)
+		expected := h.context()
+		got := h.mp.AddRemoteTxForRelay(mustMarshalTxForNodeTest(t, &consensus.Tx{
+			Version: 1, TxNonce: 1,
+			Inputs:  []consensus.TxInput{{PrevTxid: h.outpoints[0].Txid, PrevVout: h.outpoints[0].Vout}},
+			Outputs: tc.outputs,
+		}), expected)
+		if got.Disposition != RelayAdmissionStableTerminalReject || got.Err == nil || got.Err.Error() != tc.want || admitKind(t, got.Err) != TxAdmitRejected || !got.HasAdmissionContext || got.AdmissionContext != *expected || h.mp.Len() != 0 {
+			t.Fatalf("result=%+v len=%d, want terminal %q with published context", got, h.mp.Len(), tc.want)
+		}
 	}
 }
 
@@ -1636,13 +1681,7 @@ func mutateDAAdmissionPolicy(f *daNonReplayFixture, mutate func(*MempoolConfig))
 	mutate(&f.mp.policy)
 }
 
-// TestAdmitDACandidateFailuresCarryOriginatingDisposition drives ONE
-// independently constructed signed DA candidate per originating branch of the
-// shared parsed-candidate path through the dormant AdmitDA entry point after an
-// ABSENT observation, and pins the exact public kind, the exact unchanged
-// message and the Section 6.5 disposition the branch itself selected. A branch
-// AdmitDA's own prefix makes unreachable is listed below with its structural
-// reason instead of an executed row.
+// TestAdmitDACandidateFailuresCarryOriginatingDisposition drives signed DA candidates through AdmitDA; each row pins its exact public kind, message, and Section 6.5 disposition.
 func TestAdmitDACandidateFailuresCarryOriginatingDisposition(t *testing.T) {
 	simplicityOutput := consensus.TxOutput{Value: 1, CovenantType: consensus.COV_TYPE_CORE_SIMPLICITY, CovenantData: simplicityCovenantDataForNodeTest([32]byte{0x53}, nil)}
 	for _, row := range []struct {
@@ -1682,14 +1721,14 @@ func TestAdmitDACandidateFailuresCarryOriginatingDisposition(t *testing.T) {
 			kind: TxAdmitRejected, message: "TX_ERR_MISSING_UTXO: utxo not found", disposition: RelayAdmissionMissingDependency,
 		},
 		{
-			name: "static unsupported form",
+			name: "canonical unassigned covenant",
 			build: func(_ *testing.T, f *daNonReplayFixture) []byte {
 				return f.signed(daNonReplayTxSpec{
 					kind: 0x02, daID: [32]byte{0xe4}, payload: []byte("core-ext"),
 					extraOutputs: []consensus.TxOutput{{Value: 1, CovenantType: consensus.COV_TYPE_CORE_EXT}},
 				}).raw
 			},
-			kind: TxAdmitRejected, message: "CORE_EXT output unsupported by Go node runtime", disposition: RelayAdmissionStableTerminalReject,
+			kind: TxAdmitRejected, message: "TX_ERR_COVENANT_TYPE_INVALID: unknown covenant_type", disposition: RelayAdmissionStableTerminalReject,
 		},
 		{
 			name: "simplicity pre-activation without a deployment provider",

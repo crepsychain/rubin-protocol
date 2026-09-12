@@ -112,13 +112,6 @@ func rejectDaCommitDeclaredBudget(tx *consensus.Tx, maxDaBytesPerBlock uint64) e
 	return nil
 }
 
-func applyPolicyAgainstStateCoreExtUnsupported(checked *consensus.CheckedTransaction, utxos map[consensus.Outpoint]consensus.UtxoEntry) error {
-	if reject, reason := rejectUnsupportedCoreExtNodeRuntime(checked.Tx, utxos); reject {
-		return errors.New(reason)
-	}
-	return nil
-}
-
 // policyImpossibleInvariantError marks an applyPolicyAgainstState outcome that
 // no candidate property can produce — a record shape the live admission path
 // never builds. Error() returns the wrapped message verbatim, so every caller

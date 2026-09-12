@@ -2727,21 +2727,12 @@ func TestMempoolPolicyRejectsNilCheckedTransaction(t *testing.T) {
 	if err := mp.applyPolicyAgainstState(&consensus.CheckedTransaction{}, 0, nil, MempoolConfig{}); err == nil || !strings.Contains(err.Error(), "nil checked transaction") {
 		t.Fatalf("expected nil checked tx rejection, got %v", err)
 	}
-	if reject, _ := rejectUnsupportedCoreExtNodeRuntime(&consensus.Tx{Outputs: []consensus.TxOutput{{CovenantType: consensus.COV_TYPE_CORE_EXT}}}, nil); !reject {
-		t.Fatal("expected CORE_EXT output rejection")
-	}
 	if kind := covenantPolicyKind(nil, nil, consensus.COV_TYPE_CORE_EXT); kind != "" {
 		t.Fatalf("nil tx policy kind=%q", kind)
 	}
 	tx := &consensus.Tx{Inputs: []consensus.TxInput{{}}}
-	if reject, reason := rejectUnsupportedCoreExtNodeRuntime(tx, nil); !reject || !strings.Contains(reason, "input snapshot unavailable") {
-		t.Fatalf("CORE_EXT nil snapshot reject=%v reason=%q", reject, reason)
-	}
 	if _, err := policyInputSnapshot(tx, map[consensus.Outpoint]consensus.UtxoEntry{}); err == nil || !strings.Contains(err.Error(), "utxo not found") {
 		t.Fatalf("expected missing UTXO snapshot error, got %v", err)
-	}
-	if err := applyPolicyAgainstStateCoreExtUnsupported(&consensus.CheckedTransaction{Tx: tx}, nil); err == nil || !strings.Contains(err.Error(), "input snapshot unavailable") {
-		t.Fatalf("expected CORE_EXT unsupported policy error, got %v", err)
 	}
 }
 
@@ -6707,7 +6698,7 @@ func TestMempoolDAKindGuardPreservesEarlierErrors(t *testing.T) {
 				t.Fatalf("SignTransaction(retired covenant): %v", err)
 			}
 			return h.mp, mustMarshalTxForNodeTest(t, tx)
-		}, TxAdmitRejected, RelayAdmissionStableTerminalReject, "CORE_EXT output unsupported by Go node runtime", true, MempoolAdmissionCounts{Rejected: 1}},
+		}, TxAdmitRejected, RelayAdmissionStableTerminalReject, "TX_ERR_COVENANT_TYPE_INVALID: unknown covenant_type", true, MempoolAdmissionCounts{Rejected: 1}},
 		{"R4_da_fee_below_stage_c_floor", func(t *testing.T) (*Mempool, []byte) {
 			h := newRelayHarness(t, &MempoolConfig{PolicyDaSurchargePerByte: 1}, 100)
 			return h.mp, mustBuildSignedDaCommitTx(t, h.st.Utxos, h.outpoints[0], 99, 1, 1, h.fromKey, h.toAddr, []byte("0123456789"))

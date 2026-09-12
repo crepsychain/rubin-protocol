@@ -37,19 +37,6 @@ func rejectCoreSimplicityPreActivation(
 	return true, fmt.Sprintf("CORE_SIMPLICITY %s pre-ACTIVE", kind), nil
 }
 
-func rejectUnsupportedCoreExtNodeRuntime(
-	tx *consensus.Tx,
-	utxos map[consensus.Outpoint]consensus.UtxoEntry,
-) (reject bool, reason string) {
-	if kind := covenantPolicyKind(tx, utxos, consensus.COV_TYPE_CORE_EXT); kind != "" {
-		return true, fmt.Sprintf("CORE_EXT %s unsupported by Go node runtime", kind)
-	}
-	if tx != nil && utxos == nil && len(tx.Inputs) > 0 {
-		return true, "input snapshot unavailable for CORE_EXT unsupported policy"
-	}
-	return false, ""
-}
-
 func covenantPolicyKind(tx *consensus.Tx, utxos map[consensus.Outpoint]consensus.UtxoEntry, covenantType uint16) string {
 	if tx == nil {
 		return ""

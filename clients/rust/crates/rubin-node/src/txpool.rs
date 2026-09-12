@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 use rubin_consensus::uint128_json::{compare_fee_rate as compare_fee_rate_exact, fee_below_rate};
 use rubin_consensus::{
     apply_non_coinbase_tx_basic_update_with_mtp_and_suite_context,
-    constants::{COV_TYPE_CORE_EXT, COV_TYPE_CORE_SIMPLICITY, MAX_RELAY_MSG_BYTES},
+    constants::{COV_TYPE_CORE_SIMPLICITY, MAX_RELAY_MSG_BYTES},
     parse_block_header_bytes, parse_tx, tx_weight_and_stats_public, validate_tx_covenants_genesis,
     DefaultRotationProvider, NativeSuiteSet, Outpoint, RotationProvider, SuiteRegistry,
 };
@@ -1769,8 +1769,7 @@ fn validate_fee_floor(fee: u128, weight: u64, cfg_floor: u64) -> Result<(), TxPo
 /// `ed3be97`).
 ///
 /// Conservatism (verbatim Go logic): only fast-rejects when ALL of:
-///   - `tx.tx_kind == 0x00` (plain transfer; no DA / CORE_ANCHOR /
-///     CORE_EXT lanes)
+///   - `tx.tx_kind == 0x00` (plain transfer; no DA / CORE_ANCHOR lanes)
 ///   - `tx.da_payload` is empty
 ///   - exactly one input, whose outpoint resolves in `utxos` to a
 ///     COV_TYPE_P2PK entry
@@ -2072,9 +2071,6 @@ pub(crate) fn apply_policy(
         cfg.policy_min_da_fee_rate,
         cfg.policy_da_surcharge_per_byte,
     )?;
-    if let Some(reason) = reject_unsupported_core_ext_node_runtime(tx, utxos) {
-        return Err(reason);
-    }
     // Mirror of Go `applyPolicyAgainstStateSimplicity`
     // (`clients/go/node/mempolicy_helpers.go`). On the admission/relay
     // paths this arm is unreachable in practice — the pre-consensus gate
@@ -2094,14 +2090,6 @@ pub(crate) fn apply_policy(
         }
     }
     Ok(())
-}
-
-fn reject_unsupported_core_ext_node_runtime(
-    tx: &rubin_consensus::Tx,
-    utxos: &HashMap<Outpoint, rubin_consensus::UtxoEntry>,
-) -> Option<String> {
-    covenant_policy_kind(tx, utxos, COV_TYPE_CORE_EXT)
-        .map(|kind| format!("CORE_EXT {kind} unsupported by Rust node runtime"))
 }
 
 /// Missing-input precedence for the CORE_SIMPLICITY gate, mirroring Go

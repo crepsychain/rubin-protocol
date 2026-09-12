@@ -102,7 +102,7 @@ func (m *Mempool) checkTransactionWithSnapshot(txBytes []byte, snapshot *chainSt
 		return nil, nil, err
 	}
 	// Only plain P2PK candidates use the cheap floor reject. Transactions
-	// that may hit DA, CORE_ANCHOR, CORE_EXT, CORE_SIMPLICITY, or missing-UTXO policy lanes
+	// that may hit DA, CORE_ANCHOR, CORE_SIMPLICITY, or missing-UTXO policy lanes
 	// keep the existing validation and policy-error precedence below.
 	// Wave-4 (PR #1422): pass nextHeight + policy.RotationProvider so the
 	// precheck can defer on consensus-invalid P2PK output shapes
@@ -119,9 +119,6 @@ func (m *Mempool) checkTransactionWithSnapshot(txBytes []byte, snapshot *chainSt
 	policyUtxos, err := buildPolicyInputSnapshotIfNeeded(parsedTx, snapshot, policy)
 	if err != nil {
 		return nil, nil, err
-	}
-	if reject, reason := rejectUnsupportedCoreExtNodeRuntime(parsedTx, policyUtxos); reject {
-		return nil, nil, selectRelayDisposition(txAdmitRejected(reason), RelayAdmissionStableTerminalReject)
 	}
 	if policy.PolicyRejectSimplicityPreActivation {
 		// This lane has TWO error exits and they are discriminated by the SHAPE of
@@ -174,7 +171,7 @@ func (m *Mempool) checkTransactionWithSnapshot(txBytes []byte, snapshot *chainSt
 	}
 	if err := m.applyPolicyAgainstState(checked, nextHeight, policyUtxos, policy); err != nil {
 		// Constructor-frozen, context-bound static policy: anchor outputs, the
-		// DA fee/budget terms, the retired CORE_EXT surface, and Simplicity
+		// DA fee/budget terms and Simplicity
 		// pre-activation. The one state-availability outcome this fan-out can
 		// produce — an undetermined CORE_SIMPLICITY deployment state — is typed,
 		// and is UNAVAILABLE rather than stable terminal.

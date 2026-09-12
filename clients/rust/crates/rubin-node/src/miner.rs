@@ -1093,12 +1093,6 @@ mod tests {
         one_input_policy_tx(marker, 0, COV_TYPE_ANCHOR, vec![marker; 32])
     }
 
-    fn core_ext_policy_tx(marker: u8) -> (Tx, HashMap<Outpoint, UtxoEntry>) {
-        let mut cov = 7u16.to_le_bytes().to_vec();
-        encode_compact_size(0, &mut cov);
-        one_input_policy_tx(marker, 1, COV_TYPE_CORE_EXT, cov)
-    }
-
     fn core_simplicity_policy_tx(marker: u8) -> (Tx, HashMap<Outpoint, UtxoEntry>) {
         // Mirror of Go `simplicityCovenantDataForNodeTest`: 32-byte CMR +
         // compactSize(0) empty state.
@@ -1520,25 +1514,27 @@ mod tests {
     }
 
     #[test]
-    fn miner_rejects_core_ext_when_da_anchor_master_off() {
-        let (dir, _block_store, mut sync) = test_sync("rubin-rust-miner-core-ext-master-off");
-        let (tx, utxos) = core_ext_policy_tx(0x75);
-        sync.chain_state.utxos = utxos;
-        let cfg = MinerConfig {
-            policy_da_anchor_anti_abuse: false,
-            ..MinerConfig::default()
-        };
-        let miner = Miner::new(&mut sync, None, cfg).expect("miner");
-
-        let (reject, next_da) = miner
-            .reject_candidate(&tx, 0, 0)
-            .expect("CORE_EXT candidate");
-        assert!(
-            reject,
-            "CORE_EXT unsupported-runtime policy must still run when DA/anchor master is off"
-        );
-        assert_eq!(next_da, 0);
-        let _ = fs::remove_dir_all(&dir);
+    fn mine_one_unassigned_covenant_failure_image() {
+        let (_dir, _block_store, mut sync) = test_sync("rub1335-mine-one-unassigned");
+        sync.bootstrap_canonical_genesis_if_empty()
+            .expect("bootstrap");
+        let (tx, utxos) = one_input_policy_tx(0x77, 1, COV_TYPE_CORE_EXT, vec![0x01]);
+        sync.chain_state.utxos.extend(utxos);
+        let state_before = sync.chain_state.clone();
+        let sync_tip_before = sync.tip().expect("sync tip before");
+        let store = sync.block_store.as_ref().expect("block store");
+        let store_tip_before = store.tip().expect("store tip before");
+        let canonical_len_before = store.canonical_len();
+        let err = Miner::new(&mut sync, None, MinerConfig::default())
+            .expect("miner")
+            .mine_one(&[marshal_tx(&tx).expect("marshal candidate")])
+            .expect_err("unassigned candidate must fail");
+        assert_eq!(err, "TX_ERR_COVENANT_TYPE_INVALID: unknown covenant_type");
+        assert_eq!(sync.chain_state, state_before);
+        assert_eq!(sync.tip().expect("sync tip after"), sync_tip_before);
+        let store = sync.block_store.as_ref().expect("block store");
+        assert_eq!(store.tip().expect("store tip after"), store_tip_before);
+        assert_eq!(store.canonical_len(), canonical_len_before);
     }
 
     #[test]
