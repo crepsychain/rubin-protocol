@@ -3314,7 +3314,7 @@ func TestAdmitDAOutcomeOrderAndLocalCallerCensus(t *testing.T) {
 		path, name string
 		want       []string
 	}{
-		{"mempool.go", "checkParsedTransactionWithSnapshot", []string{"err", unavailable, "err", terminal, "err", "err", "stamped:relayDispositionForPolicyError", "nil"}},
+		{"mempool.go", "checkParsedTransactionWithSnapshot", []string{"err", unavailable, "err", "err", "err", "stamped:relayDispositionForPolicyError", "nil"}},
 		{"mempool.go", "rejectSimplicityPreActivationLane", []string{"nil", simplicity, simplicity, "nil"}},
 		{"mempolicy_helpers.go", "validateChainSnapshot", []string{unavailable, unavailable, "nil"}},
 		{"mempolicy_helpers.go", "validateTransactionWithConsensus", []string{"stamped:relayDispositionForConsensusError", "nil"}},

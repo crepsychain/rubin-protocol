@@ -456,9 +456,6 @@ func (m *Mempool) checkParsedTransactionWithSnapshot(
 	if err != nil {
 		return nil, nil, err
 	}
-	if reject, reason := rejectUnsupportedCoreExtNodeRuntime(tx, policyUtxos); reject {
-		return nil, nil, selectRelayDisposition(txAdmitRejected(reason), RelayAdmissionStableTerminalReject)
-	}
 	if err := m.rejectSimplicityPreActivationLane(tx, policyUtxos, nextHeight, policy); err != nil {
 		return nil, nil, err
 	}
@@ -518,10 +515,6 @@ func (m *Mempool) applyPolicyAgainstState(checked *consensus.CheckedTransaction,
 
 	// Apply DA fee policy
 	if err := applyPolicyAgainstStateDA(checked, policy, utxos); err != nil {
-		return err
-	}
-
-	if err := applyPolicyAgainstStateCoreExtUnsupported(checked, utxos); err != nil {
 		return err
 	}
 

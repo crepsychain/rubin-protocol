@@ -878,10 +878,6 @@ func (m *Miner) rejectCandidate(tx *consensus.Tx, utxos map[consensus.Outpoint]c
 		}
 	}
 
-	if reject, _ := rejectUnsupportedCoreExtNodeRuntime(tx, utxos); reject {
-		return true, policyDaIncluded, nil
-	}
-
 	// Apply Simplicity policy
 	reject, err = m.rejectCandidateSimplicityPolicy(tx, utxos, nextHeight)
 	if err != nil {

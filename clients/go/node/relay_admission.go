@@ -510,8 +510,8 @@ func relayDispositionForSimplicityPreActivationOutcome(reject bool, rotation con
 
 // relayDispositionForPolicyError classifies the static-policy fan-out
 // (applyPolicyAgainstState). Every term it applies is a constructor-frozen
-// decision over pinned inputs — anchor outputs, the DA fee/budget terms, the
-// retired CORE_EXT surface — EXCEPT two outcomes that arrive as typed wrappers
+// decision over pinned inputs — anchor outputs and the DA fee/budget terms —
+// EXCEPT two outcomes that arrive as typed wrappers
 // and are read by TYPE, never by message:
 //
 //   - the CORE_SIMPLICITY pre-activation lane's provider-DECIDED outcomes, which
@@ -520,17 +520,6 @@ func relayDispositionForSimplicityPreActivationOutcome(reject bool, rotation con
 //     such set, arrives unwrapped, and classifies with the pinned-input terms.
 //   - the fan-out's own impossible invariant, the nil checked transaction no
 //     caller can produce, which is INTERNAL and so never cache-authorizing.
-//
-// The CORE_EXT term (applyPolicyAgainstStateCoreExtUnsupported) has a second
-// branch, "input snapshot unavailable for CORE_EXT unsupported policy", which
-// would be a state-availability outcome rather than static policy. It is
-// deliberately left unwrapped because it is UNREACHABLE from this fan-out: it
-// fires only for a candidate that HAS inputs and whose policy utxo snapshot is
-// nil, and policyNeedsInputSnapshotForTx returns true whenever the candidate has
-// inputs, so buildPolicyInputSnapshotIfNeeded either hands the fan-out a non-nil
-// snapshot for such a candidate or fails before the fan-out runs. A candidate
-// that reaches the fan-out with a nil snapshot therefore has no inputs, and the
-// branch requires len(Inputs) > 0.
 func relayDispositionForPolicyError(err error) RelayAdmissionDisposition {
 	var retryable *simplicityPreActivationRetryableError
 	if errors.As(err, &retryable) {
